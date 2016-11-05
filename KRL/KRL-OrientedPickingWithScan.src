@@ -1,0 +1,543 @@
+&ACCESS RVP
+&REL 762
+&PARAM TEMPLATE = C:\KRC\Roboter\Template\vorgabe
+&PARAM EDITMASK = *
+DEF OrientedPickingWithScan()
+
+
+
+; =============================================
+; PRC DEMO 11 August 2015
+; Pickup with Orientation using 3d Scan and Vision
+; EXAMPLE By Mayank Roy
+; Type: RSI Object
+; =============================================
+
+;FOLD Overview notes
+; =============================================
+;  NAME
+;    KUKA.Ethernet.RSIXML
+;  COPYRIGHT
+;    KUKA Robter GmbH
+;
+; =============================================
+;ENDFOLD
+
+;$SEN_PREA[7] = startflag
+;$SEN_PREA[8] = calibflag
+;startflag = 0 => PC control
+;startflag = 1 => Home
+;startflag = 3 => Camera Image Grab
+;startflag = 5 => Laser Scanning
+;startflag = 7 => Pellet Pickup 
+;startflag = 9 => Drop Pellet 
+;calibflag = startflag + 1 => Process Ongoing
+;calibflag = 0 => kuka Idle
+
+DECL INT hsenprea8
+
+INT CALIBFLAG
+INT Joint
+INT RSSTR[2]
+RSSTR[1]=0
+
+RSSTR[2]=0
+
+$SEN_PREA[8]=-9
+$SEN_PREA[7]=-9
+; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+;                                                  !
+; The current position will be used as SAK movement!
+; RSI Declaration and Linking                      !
+;                                                  !
+; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+;$TOOL=TOOL_DATA[12]
+;$BASE=BASE_DATA[13]
+;$SEN_PREA[8] = 7
+
+;FOR Joint=1 to 6
+;$acc_axis[Joint]=30
+;$vel_axis[Joint]=30
+;ENDFOR
+
+
+;PTP_REL{z 200}
+
+;Fold RSI Ethernet declaration
+; Create RSI Object ST_Ethernet, read object configuration .../INIT/ERXConfig.xml
+err = ST_ETHERNET(hEthernet,0,"scannerRSI.xml")
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+ err = ST_SETPARAM(hEthernet,eERXmaxLatePackages,50) ; after "value" to late packages the robot stopps
+ err = ST_SETPARAM(hEthernet,eERXmaxLateInPercent,50) ; RSIWARNING if the limit reached
+ err = ST_SETPARAM(hEthernet,eERXmaxFieldOfView,1000) ;reset every 'value' statistics. 
+; err = ST_SETPARAM(hEthernet, eERXFastCycle, 1) ; FALSE: Time to answer 11ms / TRUE: Fast cycle: answer <2ms necessary!
+; err = ST_SETPARAM(hEthernet, eERXerrorFlag, 1) ; $FLAG[1] will be set in case off errors
+;Endfold  
+
+
+;FOLD PTP P90 CONT Vel=30 % PDAT108 Tool[12]:labtool Base[13]:latest_suction_base;%{PE}%R 5.6.13,%MKUKATPBASIS,%CMOVE,%VPTP,%P 1:PTP, 2:P90, 3:C_PTP, 5:30, 7:PDAT108
+$BWDSTART=FALSE
+PDAT_ACT=PPDAT108
+FDAT_ACT=FP90
+BAS(#PTP_PARAMS,30)
+PTP XP90 C_PTP
+;ENDFOLD
+;FOLD RSI-Objects to link out of ST_Ethernet
+; link RKorr to correction on path
+err = ST_PATHCORR(hPath,0)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+
+err=ST_SEN_PREA(hsenprea8,0,8,0)
+
+err= ST_NEWLINK(hsenprea8,1,hEthernet,1)
+IF(err<>#RSIOK)THEN
+  HALT
+ENDIF
+
+err = ST_NEWLINK(hEthernet,1,hPath,1)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_NEWLINK(hEthernet,2,hPath,2)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_NEWLINK(hEthernet,3,hPath,3)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_NEWLINK(hEthernet,4,hPath,4)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_NEWLINK(hEthernet,5,hPath,5)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_NEWLINK(hEthernet,6,hPath,6)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+
+; show RKorr on $SEN_PREA[1-8]
+err = ST_MAP2SEN_PREA(hmap,0,hEthernet,1,1)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_MAP2SEN_PREA(hmap,0,hEthernet,2,2)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_MAP2SEN_PREA(hmap,0,hEthernet,3,3)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_MAP2SEN_PREA(hmap,0,hEthernet,4,4)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_MAP2SEN_PREA(hmap,0,hEthernet,5,5)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+err = ST_MAP2SEN_PREA(hmap,0,hEthernet,6,6)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+
+err=ST_MAP2SEN_PREA(hmap,0,hEthernet,7,7)
+IF(err<>#RSIOK) THEN
+  HALT
+ENDIF
+
+;ENDFOLD
+
+err = ST_ON1(#BASE,10)
+IF (err <> #RSIOK) THEN
+  HALT
+ENDIF
+
+
+; *=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=**=*=*=*=*=*=*=*=*=*=*
+; Starting Motion
+; Based on RSI + Porgrammed control syncing by startflag
+; *=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=**=*=*=*=*=*=*=*=*=*=*
+
+;HALT
+
+
+$SEN_PREA[8]= 0
+WAIT SEC 1
+
+;WHILE($SEN_PREA[7]<>0)
+;ENDWHILE
+
+
+
+
+$BASE=BASE_DATA[13]
+$TOOL=TOOL_DATA[16]
+
+
+WHILE(TRUE)
+;WHILE($SEN_PREA[7]<>1)
+
+IF($SEN_PREA[7]==7) THEN
+  PickPellet()
+
+ELSE
+  IF($SEN_PREA[7]==3) THEN
+  GrabImage()
+
+ELSE
+  IF($SEN_PREA[7]==9) THEN
+  DropPellet()
+
+ELSE
+  IF($SEN_PREA[7]==5) THEN
+  LaserScan()
+
+ELSE
+   IF ($SEN_PREA[7]==-1) THEN
+      Calibr8()
+ENDIF
+
+ENDIF
+ENDIF
+ENDIF
+ENDIF
+
+$SEN_PREA[8] = 0
+ENDWHILE
+
+
+CameraHome()
+
+HALT
+END
+
+
+DEF GoHome()
+INT Joint
+$TOOL=TOOL_DATA[16]
+$BASE=BASE_DATA[13]
+$SEN_PREA[8] = 1
+
+FOR Joint=1 to 6
+$acc_axis[Joint]=30
+$vel_axis[Joint]=30
+ENDFOR
+
+SuctionPos.X = 600;530
+SuctionPos.Y = 50
+SuctionPos.Z = 200 
+SuctionPos.A = 0
+SuctionPos.B = 0
+SuctionPos.C = 0
+;SuctionPos.S = 010
+;SuctionPos.T = 000010
+
+PTP SuctionPos C_PTP
+
+$SEN_PREA[8] = 2
+
+END
+
+
+
+DEF IntPos()
+$SEN_PREA[8] = 1
+PTP_REL{Z 150} C_PTP
+$SEN_PREA[8] = 2
+END
+
+
+
+DEF CameraHome()
+INT Joint
+$TOOL=TOOL_DATA[12]
+$BASE=BASE_DATA[13]
+
+$SEN_PREA[8] = 1
+
+FOR Joint=1 to 6
+$acc_axis[Joint]=30
+$vel_axis[Joint]=30
+ENDFOR
+
+CameraPos.X = 528.96;530
+CameraPos.Y = 140.73;140
+CameraPos.Z = 212.08;220 
+CameraPos.A = -53.98
+CameraPos.B = -1.14
+CameraPos.C = 179.92
+PTP CameraPos C_PTP
+
+$SEN_PREA[8] = 2
+END
+
+
+
+DEF Calibr8()
+INT Joint
+GoHome()
+$TOOL=TOOL_DATA[16]
+$BASE=BASE_DATA[13]
+
+
+FOR Joint=1 to 6
+$acc_axis[Joint]=10
+$vel_axis[Joint]=10
+ENDFOR
+
+GripperPos.X = 430
+GripperPos.Y = 10
+GripperPos.Z = 200 
+GripperPos.A = 0
+GripperPos.B = 0
+GripperPos.C = 0
+PTP GripperPos C_PTP
+
+$SEN_PREA[8] = -1
+PTP_REL{z -100}
+HALT
+PTP_REL{z 100}
+
+GripperPos.X = 660
+GripperPos.Y = 10
+GripperPos.Z = 200 
+GripperPos.A = 0 ;-54
+GripperPos.B = 0 ;-1.14
+GripperPos.C = 0 ;179.92
+PTP GripperPos C_PTP
+
+$SEN_PREA[8] = -2
+PTP_REL{z -100}
+HALT
+PTP_REL{z 100}
+
+$SEN_PREA[8] = -3
+WHILE($SEN_PREA[7]<>0)
+ENDWHILE
+CameraHome()
+END
+
+
+DEF GrabImage()
+CameraHome()
+
+;$SEN_PREA[8] = 3
+
+$OUT[35] = TRUE ; Turn on LED
+$SEN_PREA[8] = 3
+$SEN_PREA[8] = 4
+WHILE($SEN_PREA[7]<>0)
+ENDWHILE
+
+$OUT[35] = FALSE ; Turn off LED
+
+;$SEN_PREA[8] = 4
+
+CameraHome()
+END
+
+
+DEF LaserScan()
+INT Joint
+
+$TOOL=TOOL_DATA[12]
+$BASE=BASE_DATA[13]
+CameraHome()
+
+FOR Joint=1 to 6
+$acc_axis[Joint]=25
+$vel_axis[Joint]=25
+ENDFOR
+
+LaserPos.X = 370
+LaserPos.Y = 190;132
+LaserPos.Z = 220;190;179 
+LaserPos.A = -53.98
+LaserPos.B = -1.14
+LaserPos.C = 179.92
+PTP LaserPos C_PTP
+
+$SEN_PREA[8] = 5
+
+FOR Joint=1 to 6
+$acc_axis[Joint]=5
+$vel_axis[Joint]=5
+ENDFOR
+
+;WAIT SEC 0.2
+PTP_REL{x 270};Increment the position in x.
+
+$SEN_PREA[8] = 6
+
+WHILE($SEN_PREA[7]<>0)
+ENDWHILE
+CameraHome()
+GoHome()
+END
+
+
+
+DEF PickPellet()
+INT Joint
+
+GoHome()
+
+$SEN_PREA[8] = 7
+
+$BASE=BASE_DATA[13]
+$TOOL=TOOL_DATA[16]
+
+
+FOR Joint=1 to 6
+$acc_axis[Joint]=50
+$vel_axis[Joint]=50
+ENDFOR
+;suctionPos.X = 200;530
+;suctionPos.Y = 200;132
+;suctionPos.Z = 200 ;300
+;suctionPos.A = 0
+;suctionPos.B = 0
+;suctionPos.C = 0
+;PTP suctionPos C_PTP
+
+;Read Position
+pelletPos.X = $SEN_PREA[1]
+pelletPos.Y = $SEN_PREA[2]
+pelletPos.Z = $SEN_PREA[3] 
+pelletPos.A = $SEN_PREA[4]
+pelletPos.B = $SEN_PREA[5]
+pelletPos.C = $SEN_PREA[6]
+
+;Achieve Position + 200*Z
+
+suctionPos.X = pelletPos.X + 0.5
+suctionPos.Y = pelletPos.Y + 1
+suctionPos.Z = pelletPos.Z + 210 
+suctionPos.A = pelletPos.A
+suctionPos.B = pelletPos.B
+suctionPos.C = pelletPos.C
+
+PTP suctionPos C_PTP
+
+
+FOR joint=1 to 6
+$acc_axis[Joint]=10
+$vel_axis[Joint]=10
+ENDFOR
+
+
+PTP_REL{Z -200} ; Approach Pellet
+
+
+
+FOR joint=1 to 6
+$acc_axis[Joint]=1
+$vel_axis[Joint]=1
+ENDFOR
+
+;WAIT SEC 0.1
+$OUT[36] = TRUE ; Turn on suction gripper
+
+
+PTP_REL{Z -11.3} ; Get pellet
+
+WAIT SEC 0.2
+
+PTP_REL{Z 11} ; Get pellet
+
+FOR joint=1 to 6
+$acc_axis[Joint]=50
+$vel_axis[Joint]=50
+ENDFOR
+
+PTP_REL{Z 200} C_PTP; Go above from table
+;WAIT SEC 1
+
+$SEN_PREA[8] = 8
+
+WHILE($SEN_PREA[7]<>0)
+ENDWHILE
+
+GoHome()
+
+END
+
+
+
+
+DEF DropPellet()
+INT Joint
+
+$BASE=BASE_DATA[13]
+$TOOL=TOOL_DATA[16]
+
+
+$SEN_PREA[8] = 9
+WAIT SEC 0.1
+;Achieve Position + 200*Z
+dropPos.X = $SEN_PREA[1]
+dropPos.Y = $SEN_PREA[2]
+dropPos.Z = $SEN_PREA[3] 
+dropPos.A = $SEN_PREA[4]
+dropPos.B = $SEN_PREA[5]
+dropPos.C = $SEN_PREA[6]
+
+
+FOR joint=1 to 6
+$acc_axis[Joint]=50
+$vel_axis[Joint]=50
+ENDFOR
+
+DsuctionPos.X = dropPos.X 
+DsuctionPos.Y = dropPos.Y 
+DsuctionPos.Z = dropPos.Z + 110 
+DsuctionPos.A = dropPos.A
+DsuctionPos.B = dropPos.B
+DsuctionPos.C = dropPos.C
+
+PTP DsuctionPos C_PTP
+
+
+FOR joint=1 to 6
+$acc_axis[Joint]=50
+$vel_axis[Joint]=50
+ENDFOR
+
+PTP_REL{Z -100} ; Approach Base
+
+;WAIT SEC 0.5
+$OUT[36] = FALSE ; Open the suction gripper
+WAIT SEC 0.5
+
+PTP_REL{Z 100} ; Drop Pellet
+
+$SEN_PREA[8] = 10
+
+WHILE($SEN_PREA[7]<>0)
+ENDWHILE
+
+GoHome()
+;CameraHome()
+END
+
+
+
+
+;approachNormal.X = SIN(suctionPos.A)*SIN(suctionPos.C)+  COS(suctionPos.A)*COS(suctionPos.C)*SIN(suctionPos.B) 
+;approachNormal.Y = COS(suctionPos.C)*SIN(suctionPos.A)*SIN(suctionPos.B) - COS(suctionPos.A)*SIN(suctionPos.C) 
+;approachNormal.Z = COS(suctionPos.B)*COS(suctionPos.C)
+;approachNormal.A = 0
+;approachNormal.B = 0
+;approachNormal.C = 0
